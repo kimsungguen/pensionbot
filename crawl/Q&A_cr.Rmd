@@ -1,0 +1,88 @@
+---
+title: "지식인크롤링"
+author: "ksg"
+date: "2017년 8월 28일"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+# 지식인에서 질문답변 크롤링하기
+## 검색결과 url만들기위한 준비
+```{r}
+keyword ='다이어트'
+keyword = toupper(unlist(iconv(keyword, "cp949", "UTF-8", toRaw = TRUE)))
+keyword = paste(keyword, collapse = "%")  
+keyword = paste0("%", keyword)
+
+# URL과 표적 태그 세팅 
+link_front = 'http://kin.naver.com/search/list.nhn?query='
+page_num = '&page='
+```
+
+## 1단계 : 질문URL 20개 가져오기(1~2페이지만)
+```{r}
+library(httr) 
+library(rvest)
+
+link = NULL
+for (i in (1:2)){
+  urls = paste0(link_front, keyword, page_num,i)  #url만들기
+  html = read_html(urls)
+  htxt = html_nodes(html, 'dt')
+  htxt = html_nodes(htxt , 'a')
+  q_url = html_attr(htxt, 'href') #각 글의 주소 
+  link = append(q_url, link)
+}
+
+head(link)
+```
+
+## 2단계 : 20개 URL에서 질문내용과 답변내용 따오기 
+```{r}
+title = NULL
+q_date = NULL
+q_cont = NULL
+a_date = NULL
+a_cont = NULL
+infor = NULL
+
+for (i in (1:20)){
+  htxt = read_html(link[i])
+  q_title = html_text(html_node(htxt, 'h3._endTitleText'))
+  q_time = html_text(html_nodes(htxt, 'dd.date'))[4]
+  q = html_text(html_nodes(htxt, 'div.end_content._endContents'))[1]
+  a_time = html_text(html_nodes(htxt, 'dd.date'))[6]
+  a = html_text(html_nodes(htxt, 'div.end_content._endContents'))[2]
+  
+  #각각누적
+  title = append(q_title, title)
+  q_date = append(q_time, q_date)
+  q_cont = append(q, q_cont)
+  a_date = append(a_time, a_date)
+  a_cont = append(a, a_cont)
+}
+```
+
+## 데이터프레임으로 합쳐서 저장하기
+```{r}
+kin = data.frame(title,q_date,q_cont,a_date, a_cont)
+
+library(qdapRegex)
+pre_pro = function(x){
+  x = as.character(x)
+  x = gsub("[[:digit:]]"," ", x) #숫자
+  x = gsub("[[:punct:]]"," ", x) #기호
+  x = gsub("[[:cntrl:]]"," ", x) #제어문자
+  x = gsub("[[:space:]]"," ", x) #공백문자
+  x = gsub("[[:blank:]]"," ", x) #간격문자
+  x = rm_white(x)
+}
+
+kin$title = pre_pro(kin$title)
+kin$q_cont = pre_pro(kin$q_cont)
+kin$a_cont = pre_pro(kin$a_cont)
+
+head(kin$q_cont)
+```
+

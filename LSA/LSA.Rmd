@@ -1,0 +1,98 @@
+---
+title: "Word_count"
+author: "ksg"
+date: "2017³â 8¿ù 28ÀÏ"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+# Áú¹®¼Ó¿¡ ¾î¶² ÁÖÁ¦µéÀÌ ÀÖ³ª ¾Ë¾Æº¸ÀÚ 
+## µ¥ÀÌÅÍ ·Îµå
+```{r}
+library(readxl)
+library(stringr)
+library(qdapRegex)
+
+qa = read_excel("D:/KMAC_2017/Data_Analysis/data.xlsx")
+
+pre_pro = function(x){
+  x = as.character(x)
+  # x = gsub("[[:digit:]]"," ", x) #¼ıÀÚ
+  x = gsub("[[:punct:]]"," ", x) #±âÈ£
+  x = gsub("[[:cntrl:]]"," ", x) #Á¦¾î¹®ÀÚ
+  x = gsub("[[:space:]]"," ", x) #°ø¹é¹®ÀÚ
+  x = gsub("[[:blank:]]"," ", x) #°£°İ¹®ÀÚ
+  x = rm_white(x)
+}
+
+qa$question = pre_pro(qa$question)
+head(qa$question)
+```
+
+
+## TDM»ı¼º
+  - ´Ü¾î°¡ µ¿½Ã¿¡ ÃâÇöÇÑ ºóµµ¸¦ ¸ŞÆ®¸¯½º·Î ¸¸µç°Í
+  - tmÆĞÅ°Áö TermDocumentMatrixÇÔ¼ö
+  - ÀÎ¼ö·Î ÇÑ±¹¾î ÅäÅ©³ªÀÌÁî ÇÔ¼ö¸¦ Á¤ÇØÁà¾ßÇÔ 
+```{r}
+library(KoNLP)
+library(tm)
+useNIADic()
+
+q_corp = Corpus(VectorSource(qa$question))
+q_corp$meta$language="ko"
+
+ko.words = function(doc){
+  d = as.character(doc)
+  d = str_split(d, ' ')[[1]]  # ¶ç¾î¾²±â(' ')¸¦ ±âÁØÀ¸·Î ´Ü¾îsplt
+  d = paste(d[nchar(d) <= 20], collapse = ' ') # 20ÀÚ ÀÌÇÏÀÎ °Í¸¸ ¼±ÅÃÇÏ¿© ´Ù½Ã ÇÕÄ§
+  pos = paste(SimplePos09(d), autoSpacing = T)  # ÇüÅÂ¼ÒºĞ¼®
+  extracted = str_match(pos, '([°¡-ÆR]+)/[NP]') #ÇüÅÂ¼ÒÁß ¸í»ç,¿ë¾ğÃßÃâ
+  keyword = extracted[,2]   # ´Ü¾î¸¸ ÃßÃâ
+  keyword[!is.na(keyword)]  # °ø¹é Á¤¸®
+}
+
+tdm = TermDocumentMatrix(q_corp, 
+                         control=list(tokenize=ko.words)) 
+                                      #removeNumbers = T,     #2¹Ú3ÀÏ....
+                                      #removePunctuation = T, #À§¿¡¼­ ÀüÃ³¸®
+                                      #stopwords = T,         #¸Æ¶ô ¼Õ½Ç ¿ì·Á..
+                                      #wordLengths=c(2,Inf))) #¼ú, ¹æ, ¹°, ¹ä..
+Encoding(tdm$dimnames$Terms)<-"UTF-8"
+
+```
+## LSAµ¹¸®±â
+  - ºóÃâ´Ü¾î »óÀ§ 1000°³¸¸ °¡Áö°í µ¹¸²(¾îÂ÷ÇÇ ´Ù °ËÅäÇØ¾ßµÇ´Ï..)
+```{r}
+library(slam)
+word.count = as.array(rollup(tdm,2))     #¸ÅÆ®¸¯½º Çàº° ÇÕ
+word.order = order(word.count, decreasing = T)[1:1000] #¸¹ÀÌ ¾²ÀÎ ´Ü¾î ¼ø¼­Á¤¸®(´Ü¾î¹øÈ£)
+freq.word = word.order[1:1000]           #»óÀ§ 1000°³ ´Ü¾î¸¸ ÀçÇÒ´ç(´Ü¾î¹øÈ£)
+
+library(lsa)
+topic.las = lsa(tdm[freq.word,], 15)   #15Â÷¿øÀ¸·Î Ãà¼Ò
+importance = order(abs(topic.las$tk[,1]), decreasing = T) #Á¤·ÄÇØ¼­ º½
+
+
+library(GPArotation)
+tk = Varimax(topic.las$tk)$loadings
+```
+
+
+```{r}
+core_word = read_excel("D:/KMAC_2017/Data_Analysis/word_freq/q_core.xlsx", 1)  #°ËÅäÇØ¼­ »ÌÀº ´Ü¾î¼Â
+str(core_word)
+core_word = core_word[core_word$Freq>5, "word"] #´Ù¼¸¹ø ÀÌ»ó ³ª¿Â´Ü¾î
+core_word = unlist(core_word) 
+
+library(LSAfun)
+PCAplot = plot_wordlist(core_word,tvectors=tk,method="PCA",dims=2)  #LSA°á°ú PCA·Î 2Â÷¿ø Ãà¼Ò ¹× ½Ã°¢È­
+
+library(ggplot2)
+p = ggplot(PCAplot, aes(PCAplot$x, PCAplot$y, label=row.names(PCAplot))) #ÁöÁöÇÃ¶ùÀ¸·Î ½Ã°¢È­
+p = p + geom_point()
+p + geom_text(aes(x=x+0.01, size=5, hjust=0))
+
+```
+```

@@ -1,0 +1,73 @@
+---
+title: "Word_count"
+author: "ksg"
+date: "2017³â 8¿ù 28ÀÏ"
+output: 
+  html_document: 
+    keep_md: yes
+---
+# Q&A µ¥ÀÌÅÍ Áß¿ä´Ü¾î ÆÄ¾ÇÇÏ±â
+## µ¥ÀÌÅÍ ·Îµå
+  - ¿¢¼¿ÆÄÀÏÀ» ·ÎµåÇÏ±âÀ§ÇØ¼­ readxlÆÐÅ°Áö»ç¿ë 
+```{r}
+library(readxl)
+qa = read_excel("D:/KMAC_2017/Data_Analysis/data.xlsx")
+str(qa)
+```
+
+## ÅØ½ºÆ® ÀüÃ³¸®
+  - ÀüÃ³¸® ÇÔ¼ö
+  - ±×¶§±×¶§ »óÈ²¿¡ µû¶ó »èÁ¦ÇÒ°Í ¼±ÅÃÇÏ¿© »ç¿ë
+  - ÀüÃ³¸®ÈÄ °ø¹éÀ» ¸»²ûÈ÷ Á¤¸®ÇÒ ¼ö ÀÖ°Ô µµ¿ÍÁÖ´Â rm_whiteÇÔ¼ö
+  - https://www.rdocumentation.org/packages/qdapRegex/versions/0.6.0/topics/rm_white
+```{r}
+library(stringr)
+library(qdapRegex)
+
+pre_pro = function(x){
+  x = as.character(x)
+  # x = gsub("[[:digit:]]"," ", x) #¼ýÀÚ
+  x = gsub("[[:punct:]]"," ", x) #±âÈ£
+  x = gsub("[[:cntrl:]]"," ", x) #Á¦¾î¹®ÀÚ
+  x = gsub("[[:space:]]"," ", x) #°ø¹é¹®ÀÚ
+  x = gsub("[[:blank:]]"," ", x) #°£°Ý¹®ÀÚ
+  x = rm_white(x)
+} 
+
+qa$title = pre_pro(qa$title)
+qa$answer = pre_pro(qa$answer)
+qa$question = pre_pro(qa$question)
+head(qa$question)
+```
+
+## ´Ü¾î ºóµµ »êÃâ 
+  - NIADicÀÌ ÁÁ´Ù°í ÇÏ´Ï±ñ useNIADic()
+  - KoNLPÆÐÅ°ÁöÀÇ SimplePos09 ÇÔ¼ö·Î ÇüÅÂ¼ÒºÐ¼®
+  - table ÇÔ¼ö·Î ºóµµ¸¦ ¼¼¼­ µ¥ÀÌÅÍÇÁ·¹ÀÓÀ¸·Î ÀúÀå
+```{r}
+library(KoNLP)
+library(tm)
+useNIADic()
+
+token = function(x){
+  x = sapply(x, FUN = SimplePos09, USE.NAMES = F) 
+  x = str_match(x, '([°¡-ÆR]+)/[NP]')
+  x = x[,2] 
+  x = unlist(x)
+  x = x[!is.na(x)]
+}
+
+q_token = data.frame(table(token(qa$question)))
+t_token = data.frame(table(token(qa$title)))
+```
+
+## È®ÀÎ ¹× ÀúÀå
+  - ¿¢¼¿¿¡¼­ ÁÖ¿ä´Ü¾î ¼±ÅÃÇÏ´Â ÀÛ¾÷ÇÏ±â À§ÇØ csvÆÄÀÏ·Î ÀúÀå
+```{r}
+library(dplyr)
+q_token %>% arrange(desc(Freq)) %>% head()
+t_token %>% arrange(desc(Freq)) %>% head()
+
+write.csv(q_token, "q_word.csv")
+write.csv(t_token, "t_word.csv")
+```
